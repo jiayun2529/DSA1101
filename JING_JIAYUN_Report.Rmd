@@ -21,11 +21,11 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Part 0: Introduction
 
-This report aims to analyze a survey dataset of 100,000 observations to predict diabetes status. We begin with EDA to understand variable–outcome relationships. Next, we use a 5-fold cross-validation on a stratified 10% sample,and then evaluate the best versions on the full data set using ROC, TPR, Precision, and AUC. Finally, we propose the most suitable classifier for this medical screening context.
+This report aims to analyze a survey dataset of 100,000 observations to predict diabetes status. We begin with EDA to understand variable–outcome relationships. Next, we use a 5-fold cross-validation on a stratified 10% sample, and then evaluate the best versions on the full dataset using ROC, TPR, Precision, and AUC. Finally, we  recommend the most suitable classifier for a medical screening context.
 
 ## Part I: EDA - Exploring Variables and Associations
 
-```{r PartI,echo=FALSE,message=FALSE}
+```{r PartI,echo=FALSE,message=FALSE, warning=FALSE}
 set.seed(611)
 
 suppressPackageStartupMessages({
@@ -58,29 +58,33 @@ diabetes$diabetes<-as.factor(diabetes$diabetes)
 ### 1.1 Variable Description
 
 #### Response Variable
-*   `diabetes`: A binary variable (`1` = diabetic, `0` = non-diabetic). Only **8.5%** of individuals have diabetes, indicating a **strong class imbalance** that must be considered during modeling.
+- **`diabetes`**: A binary variable (`1` = diabetic, `0` = non-diabetic).  
+  Only **8.5%** of individuals have diabetes, indicating a **strong class imbalance** that must be considered during modeling.
 
 #### Input Variables (Predictors)
 
-**Demographic Information:**
-- `gender`: Categorical variable for gender.  
-- `age`: Numerical variable for age in years.  
+##### Demographic Information
 
-**Medical History & Lifestyle:**
-- `hypertension`: Binary indicator for hypertension.  
-- `heart_disease`: Binary indicator for heart disease.  
-- `smoking_history`: Categorical variable for smoking status.  
+- **`gender`**: Categorical variable for gender.  
+- **`age`**: Numerical variable for age in years.  
 
-**Clinical Measurements:**
-- `bmi`: Body Mass Index.  
-- `HbA1c_level`: Hemoglobin A1c level.  
-- `blood_glucose_level`: Current blood glucose concentration.
+##### Medical History & Lifestyle
+
+- **`hypertension`**: Binary indicator for hypertension.  
+- **`heart_disease`**: Binary indicator for heart disease.  
+- **`smoking_history`**: Categorical variable for smoking status.  
+
+**Clinical Measurements**
+
+- **`bmi`**: Body Mass Index. 
+- **`HbA1c_level`**: Hemoglobin A1c level.
+- **`blood_glucose_level`**: Current blood glucose concentration.
  
 ### 1.2 Analysis of Numerical Variables (Boxplots):
 
 ```{r echo=FALSE, results='asis', message=FALSE, warning=FALSE}
 num_table <- data.frame(
-  Variable = c("Age", "BMI", "HbA1c Level", "Blood Glucose Level"),
+  Variable = c("Age", "BMI", "HbA1c_level", "Blood_Glucose_Level"),
   `Association Strength` = c("Strong", "Moderate-Weak", "Very Strong", "Very Strong"),
   `Key Observations` = c(
     "Median: 60 (diabetic) vs 40 (non-diabetic). Distributions are slightly higher for diabetics, but there is a large overlap.",
@@ -92,38 +96,43 @@ num_table <- data.frame(
   check.names = FALSE
 )
 
-kable(num_table, format = "latex", booktabs = TRUE, linesep = "") %>%
-  kable_styling(position = "center", font_size = 9) %>%
+kable(num_table, format = "latex", booktabs = TRUE, linesep = "",caption = "Association of Numerical Variables with Diabetes") %>%
+  kable_styling(position = "center", font_size = 9,latex_options = "hold_position" ) %>%
   column_spec(3, width = "6.5cm")
 ```
 
-```{r, echo=FALSE, fig.width=6, fig.height=4.5,out.width="90%"}
-par(mfrow=c(2,2), mar=c(4,4,2,1))
+
+```{r, echo=FALSE, fig.width=6, fig.height=4.5,out.width="90%",fig.pos='H'}
+par(mfrow=c(2,2), mar=c(3, 4, 1.5, 1))
 
 boxplot(diabetes$age ~ diabetes$diabetes, 
         main="Age Distribution by Diabetes",
         xlab="Diabetes", ylab="Age",
-        col=c("lightblue", "lightpink"))
+        col=c("lightblue", "lightpink"),
+        cex.main=0.9, cex.lab=0.9, cex.axis=0.8)
 
 boxplot(diabetes$bmi ~ diabetes$diabetes,
         main="BMI Distribution by Diabetes",
         xlab="Diabetes", ylab="BMI",
-        col=c("lightgreen", "lightyellow"))
+        col=c("lightgreen", "lightyellow"),
+        cex.main=0.9, cex.lab=0.9, cex.axis=0.8)
 
 boxplot(diabetes$HbA1c_level ~ diabetes$diabetes,
         main="HbA1c Level by Diabetes",
         xlab="Diabetes", ylab="HbA1c Level",
-        col=c("lavender", "lightcoral"))
+        col=c("lavender", "lightcoral"),
+        cex.main=0.9, cex.lab=0.9, cex.axis=0.8)
 
 boxplot(diabetes$blood_glucose_level ~ diabetes$diabetes,
         main="Blood Glucose by Diabetes",
         xlab="Diabetes", ylab="Blood Glucose Level",
-        col=c("lightcyan", "mistyrose"))
+        col=c("lightcyan", "mistyrose"),
+        cex.main=0.9, cex.lab=0.9, cex.axis=0.8)
 
-par(mfrow=c(1,1))
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
 ```
 
-### 1.3 Analysis of Categorical Variables (Contingency Tables):
+### 1.3 Analysis of Categorical Variables (Contingency Tables)
 
 ```{r echo=FALSE, results='asis', message=FALSE, warning=FALSE}
 cat_table <- data.frame(
@@ -138,19 +147,20 @@ cat_table <- data.frame(
   stringsAsFactors = FALSE
 )
 
-kable(cat_table, format = "latex", booktabs = TRUE, linesep = "") %>%
+kable(cat_table, format = "latex", booktabs = TRUE,caption = "Association of Categorical Variables with Diabetes") %>%
   kable_styling(position = "center", font_size = 9,latex_options = "hold_position") %>%
   column_spec(3, width = "6.5cm")
 ```
 
-## Part II: Methods: Buidling KNN, DT and LR Classifiers
+## Part II: Methods: Building KNN, DT and LR Classifiers
 
 ### 2.1 K-Nearest Neighbors (KNN)
-Before running the KNN model, the non-numerical variables Gender (very weak association) and Smoking History (moderate association) were removed. Using 5-fold cross-validation, KNN was tuned over odd *k* values from 1 to 99 using **Type I Error** as the criterion.  
-The average Type I Error was lowest when **k = 91**, indicating the best model.  
+Before running the KNN model, the non-numerical variables *Gender* (very weak association) and *Smoking History* (moderate association) were removed. To keep the model simple and avoid the high dimensionality that *one-hot encoding* would introduce, we used only the original numerical predictors.Using 5-fold cross-validation, we tuned KNN over odd *k* values from 1 to 100 using **Type I Error** as the criterion.  
+The lowest average Type I Error occurred at  **k = 91**, indicating the best model.  
 
-```{r echo=FALSE, fig.width=5, fig.height=3, fig.align='center'}
+```{r echo=FALSE, fig.width=4, fig.height=3, fig.align='center'}
 set.seed(611)
+
 train_index = createDataPartition(diabetes$diabetes, p = 0.1, list = FALSE)
 sample_data = diabetes[train_index, ]
 
@@ -159,56 +169,61 @@ n_folds = 5
 folds_j = sample(rep(1:n_folds, length.out = n))
 
 data_knn = sample_data
-
-X = data_knn[,c("age", "hypertension", "heart_disease", "bmi", "HbA1c_level", "blood_glucose_level")]
+X = data_knn[, c("age", "hypertension", "heart_disease", "bmi", 
+                 "HbA1c_level", "blood_glucose_level")]
 Y = data_knn[, 9]
+
 X_scaled = scale(X)
 
-k_values = seq(1, 99, by = 2)
+k_values = seq(1, 100, by = 2)
 
 mean_type1_error_knn = numeric(length(k_values))
 
 for (i in 1:length(k_values)) {
+  
   k = k_values[i]
   type1_error_fold = numeric(n_folds)
   
   for (j in 1:n_folds) {
+    
     test_j = which(folds_j == j)
+    
     train.x = X_scaled[-test_j, ]
-    test.x = X_scaled[test_j, ]
+    test.x  = X_scaled[test_j, ]
     train.y = Y[-test_j]
-    test.y = Y[test_j]
+    test.y  = Y[test_j]
     
     knn.pred = knn(train = train.x, test = test.x, cl = train.y, k = k)
     
-    pred_factor = factor(knn.pred, levels = c("0", "1"))
+    pred_factor   = factor(knn.pred, levels = c("0", "1"))
     actual_factor = factor(test.y, levels = c("0", "1"))
     
     confMatrix = table(actual_factor, pred_factor)
     
     TN = confMatrix["0", "0"]
     FP = confMatrix["0", "1"]
-
+    
     type1_error_fold[j] = FP / (FP + TN)
   }
+  
   mean_type1_error_knn[i] = mean(type1_error_fold)
 }
 
 best_k_index = which.min(mean_type1_error_knn)
 best_k = k_values[best_k_index]
 
-plot(k_values, mean_type1_error_knn, type = 'b', 
-     xlab = "k (Number of Neighbors)", 
-     ylab = "Average Type 1 Error", 
-     main = "KNN Tuning: Type 1 Error vs. k")
+plot(k_values, mean_type1_error_knn, type = 'b',
+     xlab = "k (Number of Neighbors)",
+     ylab = "Average Type I Error",
+     main = "KNN Tuning: Type I Error vs. k")
 
 abline(v = best_k, col = "red", lty = 2)
 ```
 ### 2.2 Decision Tree (DT)
-This R code performs sequential hyperparameter tuning for an rpart Decision Tree model designed to predict diabetes, using K-fold cross-validation to ensure reliable evaluation. 
-We first tuned the Decision Tree hyperparameters by minimizing the **cross-validated Type I Error**, but this caused a trivial classifier that predicted only the majority class due to severe imbalance (8.5 % positive cases).
-To address this, we switched to optimizing **the Geometric Mean (G-Mean)**, which balances sensitivity and specificity, and identified the optimal settings as **cp = 0.001, minsplit = 5, and maxdepth = 30**.
-```{r echo=FALSE, fig.width=10, fig.height=3.5, fig.align='center', out.width="100%"}
+We first tuned the Decision Tree by minimizing the **cross-validated Type I Error**, but this caused a trivial classifier that always predicted the majority class due to severe imbalance (only 8.5 % positive cases).
+To address this, we switched to optimizing **the Geometric Mean (G-Mean)**, which balances sensitivity and specificity. This approach yielded the optimal hyperparameters: **cp = 0.001, minsplit = 5, and maxdepth = 30**.
+
+```{r echo=FALSE, fig.width=10, fig.height=2.5, fig.align='center', out.width="100%"}
 par(mfrow = c(1, 3), mar = c(4, 4, 2, 1))
 data_dt <- sample_data
 data_dt$gender <- factor(data_dt$gender, levels = c("Female", "Male", "Other"))
@@ -357,9 +372,9 @@ abline(v = best_maxdepth, col = "red", lty = 2)
 par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
 ```
 ### 2.3 Logistic Regression (LR)
-The logistic regression model was refined using **backward stepwise selection**, by sequentially removing **variables with high p-values** (gender and smoking_history). The final refined model retains similar Type I Error performance while improving overall statistical significance and model simplicity.
+The logistic regression model was refined using **backward stepwise selection**, removing **variables with high p-values** (Gender and Smoking History). The final model maintains similar Type I Error performance while improving overall statistical significance and simplicity.
 
-To improve detection of diabetic patients in an imbalanced dataset, the classification threshold was optimized from **0.5 to 0.07**, which substantially increased **sensitivity (from 0.63 to 0.88)** at the cost of reduced specificity and precision. In medical contexts, where **missing true cases is riskier than false alarms**, the optimized model at threshold 0.08 provides a more suitable balance for early diabetes prediction.
+Because the dataset is imbalanced, we optimized the classification threshold from **0.5 to 0.07** to improve the detection of diabetic cases. This adjustment increased sensitivity from **0.63 to 0.88**, with lower specificity and precision as a trade-off. In medical contexts, where **missing a true case is riskier than generating a false alarm**, the optimized model at threshold 0.07 provides a more suitable balance for early diabetes prediction.
 ```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=5, fig.height=3, fig.align='center'}
 data_lr <- sample_data
 data_lr$hypertension <- as.factor(data_lr$hypertension)
@@ -401,11 +416,12 @@ type1_error_lr <- data.frame(
   Model = names(models_lr),
   Type1_Error = round(type1_error_lr, 4)
 )
-knitr::kable(type1_error_lr, digits = 4) %>%
+knitr::kable(type1_error_lr, digits = 4, caption = "Comparison of LR Models (Type I Error)") %>%
   kable_styling(latex_options = "scale_down")
 
-#----------------------------------------#
+```
 
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=5, fig.height=3, fig.align='center'}
 predicted_probs <- predict(model_3, newdata = data_lr, type = "response")
 
 thresholds <- seq(0.01, 0.99, by = 0.01)
@@ -477,7 +493,7 @@ metrics_optimal <- calculate_all_metrics(conf_optimal)
 comparison_df <- rbind(metrics_default, metrics_optimal)
 rownames(comparison_df) <- c("LR with Default Threshold (0.5)", "LR with Optimal Threshold (0.07)")
 
-knitr::kable(comparison_df, digits = 4) %>%
+knitr::kable(comparison_df, digits = 4, caption = "Best LR Model: Default vs Optimal Thresholds") %>%
   kable_styling(latex_options = "scale_down")
 ```
 
@@ -576,14 +592,14 @@ summary_table <- data.frame(
 )
 
 knitr::kable(summary_table, booktabs = TRUE,
-             col.names = c("Model", "AUC", "TPR", "Precision"))
+             col.names = c("Model", "AUC", "TPR", "Precision"),caption = "Final Performance of KNN, DT, and LR")
 ```
 
 **KNN**: Detects **58.40%** of diabetic cases but achieves **very high precision (98.22%)**, indicating it's reliable in positive predictions, though it misses many true diabetics.
 
 **DT**: Reaches **66.91% sensitivity** with **perfect precision (100.00%)**. It misses about one-third of diabetics but makes **no false positive predictions**.
 
-**LR**: Identifies **88.94%** of diabetic cases(the highest TPR)but with **lower precision (39.19%)**, meaning it tends to flag more false positives.
+**LR**: The optimized model, evaluated on the full dataset, identifies **88.94%** of diabetic cases (the highest TPR) but with **lower precision (39.19%)**, meaning it tends to flag more false positives.
 
 ### 2.5 Comments on Pros and Cons of Each Classifier
 
@@ -607,25 +623,25 @@ library(tibble)
 pros_cons_data <- tribble(
   ~Classifier, ~Pros, ~Cons,
   
-  "**K-Nearest Neighbors (KNN)**",
-  "\\textbf{High Precision (99.65\\%):} Positive predictions are extremely reliable, useful for confirmatory diagnosis. \n\n
+  "K-Nearest Neighbors (KNN)",
+  "\\textbf{High Precision (98.22\\%):} Positive predictions are extremely reliable, useful for confirmatory diagnosis. \n\n
    \\textbf{Model Simplicity:} Conceptually simple and non-parametric.",
-  "\\textbf{Poor Sensitivity (46.7\\%):} Fails to identify over half of diabetic cases, making it unsuitable for initial screening. \n\n
+  "\\textbf{Poor Sensitivity (58.40\\%):} Fails to identify over half of diabetic cases, making it unsuitable for initial screening. \n\n
    \\textbf{Computational Cost:} Expensive for large datasets (100,000 observations). \n\n
    \\textbf{Handles Only Numerical Data:} Required exclusion of categorical variables like \\texttt{smoking\\_history}.",
   
-  "**Decision Tree (DT)**",
-  "\\textbf{Interpretability:} Rules (e.g., ``if HbA1c $> 6.5$'') are easy for medical professionals to understand and validate. \n\n
+  "Decision Tree (DT)",
+  "\\textbf{Interpretability:} Rules are easy for medical professionals to understand and validate. \n\n
    \\textbf{Handles Mixed Data Types:} Natively uses both numerical and categorical predictors. \n\n
-   \\textbf{Balanced Performance:} Achieved a good balance between sensitivity (70.86\\%) and precision (90.84\\%).",
+   \\textbf{Balanced Performance:} Achieved a good balance between sensitivity (66.91\\%) and precision (100.00\\%).",
   "\\textbf{Lower Sensitivity than LR:} Misses more diabetic cases compared to the optimized LR model. \n\n
    \\textbf{Instability:} Small changes in data can lead to a completely different tree structure.",
   
-  "**Logistic Regression (LR)**",
-  "\\textbf{Highest Sensitivity (89.25\\%):} Best at identifying true diabetic cases, which is the primary goal of screening. \n\n
+  "Logistic Regression (LR)",
+  "\\textbf{Highest Sensitivity (88.94\\%):} Best at identifying true diabetic cases, which is the primary goal of screening. \n\n
    \\textbf{Probabilistic Output \\& Flexibility:} Allows threshold adjustment for clinical needs. \n\n
    \\textbf{Interpretability of Coefficients:} Coefficients reveal the strength and direction of each risk factor.",
-  "\\textbf{Low Precision (39.12\\%):} High sensitivity comes at the cost of many false positives. \n\n
+  "\\textbf{Low Precision (39.19\\%):} High sensitivity comes at the cost of many false positives. \n\n
    \\textbf{Linearity Assumption:} Assumes a linear relationship between predictors and the log-odds of the outcome."
 )
 
@@ -634,35 +650,35 @@ kbl(
   format = "latex",
   booktabs = FALSE,
   escape = FALSE,
-  caption = "Comparison of Classifier Pros and Cons",
   longtable = TRUE,
   linesep = "\\hline"
 ) %>%
   kable_styling(
-    font_size = 9,
-    latex_options = c("hold_position", "repeat_header", "bordered"),
+    font_size = 8,
+    latex_options = c("hold_position", "repeat_header"),
     full_width = FALSE,
     position = "center"
   ) %>%
   column_spec(1, width = "7em") %>%
-  column_spec(2, width = "18em", border_right = TRUE) %>%
-  column_spec(3, width = "18em", border_right = TRUE) %>%
-  row_spec(0, bold = TRUE, background = "gray!15") %>%
-  row_spec(1:nrow(pros_cons_data), background = "white")
+  column_spec(2, width = "18em") %>%
+  column_spec(3, width = "18em") %>%
+  row_spec(0, bold = TRUE, background = "gray!15")
 ```
 
 ## Part III Conclusion: The Best Model/Classifier
 
-After evaluating the **K-Nearest Neighbors (KNN)**, **Decision Tree (DT)**, and **Logistic Regression (LR)** models, the **optimized Logistic Regression (LR)** model is identified as the **best classifier** for predicting diabetes in this screening task.
+After comparing the **K-Nearest Neighbors (KNN)**, **Decision Tree (DT)**, and **Logistic Regression (LR)** models, the **optimized Logistic Regression (LR)** model is the **best classifier** for this screening task.
 
-The main goal of a screening model is to **detect as many true cases as possible** — prioritizing *high sensitivity (True Positive Rate)* over precision. Missing a diabetic patient (*false negative*) poses a far greater risk than incorrectly flagging a healthy person (*false positive*).
+The main goal of a screening model is **high sensitivity**, detecting as many true diabetic cases as possible. Missing a diabetic patient (a *false negative*) has more serious consequences than flagging a healthy person (*false positive*).
 
-The **tuned LR model**, with a **threshold set to 0.07**, achieved the **highest sensitivity of 88.94%**, correctly identifying *nearly nine out of ten* diabetic individuals. Although this came with a **lower precision of 39.19%**, the trade-off is acceptable for an *initial screening stage*, where flagged individuals can later undergo confirmatory testing.
+The **Logistic Regression model**, with a **threshold set to 0.07**, achieved the **highest sensitivity (88.94%)**, correctly identifying *nearly nine out of ten* diabetic individuals. Although this came with a **lower precision of 39.19%**, the trade-off is acceptable for an *initial screening stage*, where flagged individuals can later undergo follow-up diagnostic tests.
 
 In comparison:
-**KNN** showed *extremely high precision (98.21%)* but *critically low sensitivity (58.40%)*, missing over half the diabetic cases.
-**DT** achieved a *moderate sensitivity (66.91%)* but still lagged behind LR in identifying true positives.
 
-Overall, the **Logistic Regression model** offers the best balance for medical screening: it **detects the majority of true cases**, allows *flexible threshold adjustment* for clinical needs, and remains **highly interpretable**.  
+**KNN** showed **extremely high precision (98.22%)** but **low sensitivity (58.40%)**, missing over half the diabetic cases.
+
+**DT** achieves **66.91% sensitivity and 100% precision**, producing no false positives. This makes it suitable as **a secondary confirmatory model**, not as the primary screener.
+
+Overall, the **Logistic Regression model** offers the best balance for medical screening: it **detects the majority of true cases**, allows **flexible threshold adjustment** for clinical needs, and remains **highly interpretable**.  
 
 Hence, it is the **most effective and responsible choice** for diabetes prediction in this dataset.
